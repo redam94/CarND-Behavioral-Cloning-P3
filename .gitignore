@@ -1,3 +1,5 @@
 training/data/drivingData
 training/data/drivingDataHard
 training/data/johnsDrivingData
+training/data/*
+**/*.mp4
