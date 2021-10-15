@@ -1,1 +1,1 @@
-from .plot_record import plot_record
+from .plot_record import plot_record, animate_record

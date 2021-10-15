@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Union
 from PIL import Image
+import matplotlib.animation as anim
+import matplotlib.pyplot as plt
 
 class DrivingRecord:
     """Driving Record Dataset 
@@ -41,8 +43,12 @@ class DrivingRecord:
         next_driving_data = self._ingest_driving_data(next_row)
         return current_img, current_driving_data, next_img, next_driving_data
 
-
+    def get_attribute(self, idx: int, attr: str):
+        return self.driving_record.iloc[idx][attr]
     
+    def visualize(self):
+        pass
+
     def _ingest_img(self, row : pd.core.series.Series) -> np.ndarray:
         center_img = Image.open(row['center_img'])
         left_img = Image.open(row['left_img'])
