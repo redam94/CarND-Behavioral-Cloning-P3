@@ -85,9 +85,9 @@ class GeneratorModel(Model):
         self.decoder = decoder_model
     
     def call(self, inputs):
-        x = self.encoder(inputs)
-        x = self.decoder(x)
-        return x
+        encoding = self.encoder(inputs)
+        img_gen = self.decoder(encoding)
+        return img_gen, encoding
 
 class AdversarialModel(Model):
     def __init__(self) -> None:
@@ -99,16 +99,18 @@ class AdversarialModel(Model):
         self.max_pooling_layer2 = layers.MaxPool2D()
         self.conv3x3_layer3 = layers.Conv2D(128, (3, 3), activation=acts.swish, name = "Conv3x3_layer_3")
         self.global_max = layers.GlobalMaxPooling2D()
+        #self.concatinate = layers.Concatenate()
         self.fc1 = layers.Dense(32, activation=acts.swish, name="fc1")
         self.out = layers.Dense(1, name='is_real')
-    def call(self, inputs):
-        x = self.conv3x3_layer1(inputs)
+    def call(self, images, encoding):
+        x = self.conv3x3_layer1(images)
         x = self.batch_normalization_layer1(x)
         x = self.max_pooling_layer1(x)
         x = self.conv3x3_layer2(x)
         x = self.max_pooling_layer2(x)
         x = self.conv3x3_layer3(x)
         x = self.global_max(x)
+        #x = self.concatinate([x, encoding])
         x = self.fc1(x)
         out = self.out(x)
         return out
@@ -119,8 +121,8 @@ cross_entropy = losses.BinaryCrossentropy(from_logits=True)
 def generator_loss(fake_output):
     return cross_entropy(tf.ones_like(fake_output), fake_output)
 
-def image_loss(images, gen_images):
-    return mse(images, gen_images)
+def image_loss(images, gen_images, l=1e-6):
+    return mse(images, gen_images) + l*tf.reduce_sum(image.total_variation(gen_images))
 
 def adversarial_loss(real_output, fake_output):
     
@@ -128,6 +130,7 @@ def adversarial_loss(real_output, fake_output):
     real_loss = cross_entropy(tf.ones_like(real_output)*.9 + .1*tf.random.uniform(shape=real_output.shape), real_output)
     
     return fake_loss + real_loss
+
 
 gen_loss_tracker = metrics.Mean(name="gen_loss")
 adv_loss_tracker = metrics.Mean(name="adv_loss")
@@ -145,16 +148,17 @@ class GAN(Model):
         self.gen_optimizer = gen_optimizer
         
     def call(self, x, training=True):
-        return self.generator(x)
+        img_gen, encoding = self.generator(x)
+        return img_gen
     
     @tf.function() 
     def train_step(self, images):
         images, _ = images
         with tf.GradientTape() as gen_tape, tf.GradientTape() as adv_tape:
-            generated_images = self.generator(images)
+            generated_images, encoding = self.generator(images)
             
-            real_output = self.adversary(images, training=True)
-            fake_output = self.adversary(generated_images, training=True)
+            real_output = self.adversary(images, encoding, training=True)
+            fake_output = self.adversary(generated_images, encoding, training=True)
 
             gen_loss = generator_loss(fake_output)
             im_loss = image_loss(images, generated_images)
