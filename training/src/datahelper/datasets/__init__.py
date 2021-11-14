@@ -1,1 +1,1 @@
-from .records import DrivingRecord
+from .records import DrivingRecord, CenterDrivingRecord

@@ -60,4 +60,16 @@ class DrivingRecord:
         return current_img/255.0
 
     def _ingest_driving_data(self, row : pd.core.series.Series) -> np.ndarray:
-        return np.asarray(row[['speed', 'steering_angle', 'throttle', 'brake']], dtype=np.float32)
+        driving_data = np.asarray(row[['speed', 'steering_angle', 'throttle', 'brake']], dtype=np.float32)
+        driving_data[0] = driving_data[0]/31.0 #Normalize speed to between 0 and 1
+        return driving_data
+
+class CenterDrivingRecord(DrivingRecord):
+    def __init__(self, driving_record: pd.DataFrame) -> None:
+        super().__init__(driving_record)
+    def _ingest_img(self, row: pd.core.series.Series) -> np.ndarray:
+        center_img = Image.open(row['center_img'])
+        center_img = np.asarray(center_img)
+        height, width, channels = center_img.shape
+        
+        return center_img[height//3:,:,:]/255.0

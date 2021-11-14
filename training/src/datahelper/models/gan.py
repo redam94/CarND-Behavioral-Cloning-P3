@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import tensorflow as tf
 from tensorflow import keras, image
 from tensorflow.keras import Model, layers, activations as acts, losses, metrics
@@ -9,13 +10,14 @@ import time
 class Patches(Layer):
     """Patch dim must be of length 4 [1, x_dim, y_dim, 1] or 2 [x_dim, y_dim] 
         modified from https://keras.io/examples/vision/image_classification_with_vision_transformer/"""
-    def __init__(self, patch_dim: list[int]) -> None:
-        super().__init__()
+    def __init__(self, patch_dim: list[int], *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         if len(patch_dim) == 2:
             patch_dim = [1, patch_dim[0], patch_dim[1], 1]
         if len(patch_dim) != 4:
             raise ValueError
         self.patch_dim = patch_dim
+   
     
     def call(self, images: Union[np.ndarray, tf.Tensor]) -> tf.Tensor:
         batch_size = tf.shape(images)[0]
@@ -25,8 +27,8 @@ class Patches(Layer):
             strides = self.patch_dim,
             rates = [1, 1, 1, 1],
             padding = "VALID" )
-        patch_dims = patches.shape[-1]
-        patches = tf.reshape(patches, [batch_size, -1, patch_dims])
+        #patch_dims = patches.shape[-1]
+        #patches = tf.reshape(patches, [batch_size, -1, patch_dims])
         return patches
 
 class EncoderModel(Model):
@@ -84,7 +86,7 @@ class GeneratorModel(Model):
         self.encoder = encoder_model
         self.decoder = decoder_model
     
-    def call(self, inputs):
+    def call(self, inputs: tf.Tensor):
         encoding = self.encoder(inputs)
         img_gen = self.decoder(encoding)
         return img_gen, encoding
@@ -102,7 +104,7 @@ class AdversarialModel(Model):
         #self.concatinate = layers.Concatenate()
         self.fc1 = layers.Dense(32, activation=acts.swish, name="fc1")
         self.out = layers.Dense(1, name='is_real')
-    def call(self, images, encoding):
+    def call(self, images: tf.Tensor, encoding: tf.Tensor) -> tf.Tensor:
         x = self.conv3x3_layer1(images)
         x = self.batch_normalization_layer1(x)
         x = self.max_pooling_layer1(x)
@@ -118,13 +120,13 @@ class AdversarialModel(Model):
 mse = losses.MeanSquaredError()
 cross_entropy = losses.BinaryCrossentropy(from_logits=True)
 
-def generator_loss(fake_output):
+def generator_loss(fake_output: tf.Tensor) -> tf.Tensor:
     return cross_entropy(tf.ones_like(fake_output), fake_output)
 
-def image_loss(images, gen_images, l=1e-6):
+def image_loss(images: tf.Tensor, gen_images: tf.Tensor, l: float=1e-6) -> tf.Tensor:
     return mse(images, gen_images) + l*tf.reduce_sum(image.total_variation(gen_images))
 
-def adversarial_loss(real_output, fake_output):
+def adversarial_loss(real_output: tf.Tensor, fake_output: tf.Tensor) -> tf.Tensor:
     
     fake_loss = cross_entropy(tf.zeros_like(fake_output)+.1*tf.random.uniform(shape=fake_output.shape), fake_output)
     real_loss = cross_entropy(tf.ones_like(real_output)*.9 + .1*tf.random.uniform(shape=real_output.shape), real_output)
@@ -137,22 +139,22 @@ adv_loss_tracker = metrics.Mean(name="adv_loss")
 img_loss_tracker = metrics.Mean(name="img_loss")
 
 class GAN(Model):
-    def __init__(self, generator : GeneratorModel, adversary : AdversarialModel):
+    def __init__(self, generator : GeneratorModel, adversary : AdversarialModel) -> None:
         super().__init__()
         self.generator = generator
         self.adversary = adversary
         
-    def compile(self, adv_optimizer, gen_optimizer):
+    def compile(self, adv_optimizer : tf.optimizers.Optimizer, gen_optimizer : tf.optimizers.Optimizer) -> None:
         super().compile()
         self.adv_optimizer = adv_optimizer
         self.gen_optimizer = gen_optimizer
         
-    def call(self, x, training=True):
+    def call(self, x : tf.Tensor, training : bool =True) -> tf.Tensor:
         img_gen, encoding = self.generator(x)
         return img_gen
     
     @tf.function() 
-    def train_step(self, images):
+    def train_step(self, images : tf.Tensor) -> dict:
         images, _ = images
         with tf.GradientTape() as gen_tape, tf.GradientTape() as adv_tape:
             generated_images, encoding = self.generator(images)
@@ -176,16 +178,17 @@ class GAN(Model):
         img_loss_tracker.update_state(im_loss)
         return {'gen_loss': gen_loss_tracker.result(), 'adv_loss':adv_loss_tracker.result(), 'img_loss': img_loss_tracker.result()}
 
-    
-    #def train(self, dataset, epochs, batch_size):
-    #    for epoch in range(epochs):
-    #        start = time.time()
-    #        dataset_len = dataset.shape[0]
-    #        batches = dataset_len//batch_size
-    #        for batch_number in range(batches):
-    #            img_batch = dataset[batch_size*batch_number:batch_size*(batch_number+1)]
-    #            self.train_step(img_batch)
-    #        print(f"Time for epoch {epoch} is {time.time()-start} sec")
+
+class PatchModel(Model):
+    pass
+
+class Transformer(ABC):
+    @abstractmethod
+    def transform(self, input: Union[tf.Tensor, np.ndarray]) -> tf.Tensor:
+        return tf.constant(input)
+
+    def  __call__(self, input: Union[tf.Tensor, np.ndarray]) -> tf.Tensor:
+        return self.transform(input)
 
 
 
